@@ -1,0 +1,180 @@
+<!DOCTYPE html><html lang="en" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spring Security 结合 oauth2的基本使用方法（四） | Hexo</title><meta name="author" content="John Doe"><meta name="copyright" content="John Doe"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="1.前面我们说了 如何去刷新 token 的值，现在我们讲一下 token的 存储位置，之前我们是吧token的值存储在 内存里面，现在 我们把 token存入 redis 里面。1-1 首先 pom文件 添加 redis 依赖12345&lt;!--        配置redis，将access_token存入redis--&gt;      &lt;dependency&gt;">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Spring Security 结合 oauth2的基本使用方法（四）">
+<meta property="og:url" content="http://example.com/2021/08/25/aouth2-pass-token-redis/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="1.前面我们说了 如何去刷新 token 的值，现在我们讲一下 token的 存储位置，之前我们是吧token的值存储在 内存里面，现在 我们把 token存入 redis 里面。1-1 首先 pom文件 添加 redis 依赖12345&lt;!--        配置redis，将access_token存入redis--&gt;      &lt;dependency&gt;">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://example.com/null">
+<meta property="article:published_time" content="2021-08-25T13:56:43.346Z">
+<meta property="article:modified_time" content="2021-08-25T14:20:35.560Z">
+<meta property="article:author" content="John Doe">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/null"><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="http://example.com/2021/08/25/aouth2-pass-token-redis/"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free/css/all.min.css" media="print" onload="this.media='all'"><script>const GLOBAL_CONFIG = { 
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlighjs","highlightCopy":true,"highlightLang":true},
+  copy: {
+    success: 'Copy successfully',
+    error: 'Copy error',
+    noSupport: 'The browser does not support'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  date_suffix: {
+    just: 'Just',
+    min: 'minutes ago',
+    hour: 'hours ago',
+    day: 'days ago',
+    month: 'months ago'
+  },
+  copyright: undefined,
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  source: {
+    jQuery: 'https://cdn.jsdelivr.net/npm/jquery@latest/dist/jquery.min.js',
+    justifiedGallery: {
+      js: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/js/jquery.justifiedGallery.min.js',
+      css: 'https://cdn.jsdelivr.net/npm/justifiedGallery/dist/css/justifiedGallery.min.css'
+    },
+    fancybox: {
+      js: 'https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.js',
+      css: 'https://cdn.jsdelivr.net/npm/@fancyapps/fancybox@latest/dist/jquery.fancybox.min.css'
+    }
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isanchor: false
+};
+
+const saveToLocal = {
+  // ttl 單位是 天
+  set: function setWithExpiry(key, value, ttl) {
+    if (ttl === 0) return
+    const now = new Date()
+    const expiryDay = ttl * 86400000
+    const item = {
+      value: value,
+      expiry: now.getTime() + expiryDay,
+    }
+    localStorage.setItem(key, JSON.stringify(item))
+  },
+
+  get: function getWithExpiry(key) {
+    const itemStr = localStorage.getItem(key)
+
+    if (!itemStr) {
+      return undefined
+    }
+    const item = JSON.parse(itemStr)
+    const now = new Date()
+
+    if (now.getTime() > item.expiry) {
+      localStorage.removeItem(key)
+      return undefined
+    }
+    return item.value
+  }
+}
+
+// https://stackoverflow.com/questions/16839698/jquery-getscript-alternative-in-native-javascript
+const getScript = url => new Promise((resolve, reject) => {
+  const script = document.createElement('script')
+  script.src = url
+  script.async = true
+  script.onerror = reject
+  script.onload = script.onreadystatechange = function() {
+    const loadState = this.readyState
+    if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+    script.onload = script.onreadystatechange = null
+    resolve()
+  }
+  document.head.appendChild(script)
+})</script><script id="config_change">var GLOBAL_CONFIG_SITE = { 
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2021-08-25 22:20:35'
+}</script><noscript><style type="text/css">
+  #nav {
+    opacity: 1
+  }
+  .justified-gallery img {
+    opacity: 1
+  }
+
+  #recent-posts time,
+  #post-meta time {
+    display: inline !important
+  }
+</style></noscript><script>(function () {  window.activateDarkMode = function () {
+    document.documentElement.setAttribute('data-theme', 'dark')
+    if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+    }
+  }
+  window.activateLightMode = function () {
+    document.documentElement.setAttribute('data-theme', 'light')
+   if (document.querySelector('meta[name="theme-color"]') !== null) {
+      document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+    }
+  }
+  const autoChangeMode = 'false'
+  const t = saveToLocal.get('theme')
+  if (autoChangeMode === '1') {
+    const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+    const isLightMode = window.matchMedia('(prefers-color-scheme: light)').matches
+    const isNotSpecified = window.matchMedia('(prefers-color-scheme: no-preference)').matches
+    const hasNoSupport = !isDarkMode && !isLightMode && !isNotSpecified
+    if (t === undefined) {
+      if (isLightMode) activateLightMode()
+      else if (isDarkMode) activateDarkMode()
+      else if (isNotSpecified || hasNoSupport) {
+        const now = new Date()
+        const hour = now.getHours()
+        const isNight = hour <= 6 || hour >= 18
+        isNight ? activateDarkMode() : activateLightMode()
+      }
+      window.matchMedia('(prefers-color-scheme: dark)').addListener(function (e) {
+        if (saveToLocal.get('theme') === undefined) {
+          e.matches ? activateDarkMode() : activateLightMode()
+        }
+      })
+    } else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else if (autoChangeMode === '2') {
+    const now = new Date()
+    const hour = now.getHours()
+    const isNight = hour <= 6 || hour >= 18
+    if (t === undefined) isNight ? activateDarkMode() : activateLightMode()
+    else if (t === 'light') activateLightMode()
+    else activateDarkMode()
+  } else {
+    if (t === 'dark') activateDarkMode()
+    else if (t === 'light') activateLightMode()
+  }const asideStatus = saveToLocal.get('aside-status')
+if (asideStatus !== undefined) {
+   if (asideStatus === 'hide') {
+     document.documentElement.classList.add('hide-aside')
+   } else {
+     document.documentElement.classList.remove('hide-aside')
+   }
+}})()</script><meta name="generator" content="Hexo 5.3.0"><link rel="alternate" href="/atom.xml" title="Hexo" type="application/atom+xml">
+</head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="author-avatar"><img class="avatar-img" src="/null" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data"><div class="data-item is-center"><div class="data-item-link"><a href="/archives/"><div class="headline">Articles</div><div class="length-num">4</div></a></div></div></div><hr/></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header"><nav id="nav"><span id="blog_name"><a id="site-name" href="/">Hexo</a></span><div id="menus"><div id="toggle-menu"><a class="site-page"><i class="fas fa-bars fa-fw"></i></a></div></div></nav><div id="post-info"><h1 class="post-title">Spring Security 结合 oauth2的基本使用方法（四）</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">Created</span><time class="post-meta-date-created" datetime="2021-08-25T13:56:43.346Z" title="Created 2021-08-25 21:56:43">2021-08-25</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">Updated</span><time class="post-meta-date-updated" datetime="2021-08-25T14:20:35.560Z" title="Updated 2021-08-25 22:20:35">2021-08-25</time></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv"><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">Post View:</span><span id="busuanzi_value_page_pv"></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="post-content" id="article-container"><h3 id="1-前面我们说了-如何去刷新-token-的值，现在我们讲一下-token的-存储位置，之前我们是吧token的值存储在-内存里面，现在-我们把-token存入-redis-里面。"><a href="#1-前面我们说了-如何去刷新-token-的值，现在我们讲一下-token的-存储位置，之前我们是吧token的值存储在-内存里面，现在-我们把-token存入-redis-里面。" class="headerlink" title="1.前面我们说了 如何去刷新 token 的值，现在我们讲一下 token的 存储位置，之前我们是吧token的值存储在 内存里面，现在 我们把 token存入 redis 里面。"></a>1.前面我们说了 如何去刷新 token 的值，现在我们讲一下 token的 存储位置，之前我们是吧token的值存储在 内存里面，现在 我们把 token存入 redis 里面。</h3><h3 id="1-1-首先-pom文件-添加-redis-依赖"><a href="#1-1-首先-pom文件-添加-redis-依赖" class="headerlink" title="1-1 首先 pom文件 添加 redis 依赖"></a>1-1 首先 pom文件 添加 redis 依赖</h3><figure class="highlight xml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">&lt;!--        配置redis，将access_token存入redis--&gt;</span></span><br><span class="line">      <span class="tag">&lt;<span class="name">dependency</span>&gt;</span></span><br><span class="line">          <span class="tag">&lt;<span class="name">groupId</span>&gt;</span>org.springframework.boot<span class="tag">&lt;/<span class="name">groupId</span>&gt;</span></span><br><span class="line">          <span class="tag">&lt;<span class="name">artifactId</span>&gt;</span>spring-boot-starter-data-redis<span class="tag">&lt;/<span class="name">artifactId</span>&gt;</span></span><br><span class="line">      <span class="tag">&lt;/<span class="name">dependency</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<h3 id="我们修改-AuthorizationServer-类"><a href="#我们修改-AuthorizationServer-类" class="headerlink" title="我们修改  AuthorizationServer 类"></a>我们修改  AuthorizationServer 类</h3><figure class="highlight java"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"> <span class="comment">/**</span></span><br><span class="line"><span class="comment">  *  提供 redisConnectionFactory 的连接bean</span></span><br><span class="line"><span class="comment">  */</span></span><br><span class="line"> <span class="meta">@Autowired</span></span><br><span class="line"> RedisConnectionFactory redisConnectionFactory;</span><br><span class="line"></span><br><span class="line"><span class="meta">@Bean</span></span><br><span class="line"> <span class="function">TokenStore <span class="title">tokenStore</span><span class="params">()</span> </span>&#123;</span><br><span class="line">     <span class="comment">//将原有的基于内存 变为 基于redis</span></span><br><span class="line">    <span class="comment">// return new InMemoryTokenStore(); </span></span><br><span class="line">       <span class="keyword">return</span>  <span class="keyword">new</span> RedisTokenStore(redisConnectionFactory);</span><br><span class="line"> &#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+
+<h3 id="yml-文件中配置-redis-连接-方式-，前提是本地启动了-redis"><a href="#yml-文件中配置-redis-连接-方式-，前提是本地启动了-redis" class="headerlink" title="yml 文件中配置   redis 连接 方式 ，前提是本地启动了 redis"></a>yml 文件中配置   redis 连接 方式 ，前提是本地启动了 redis</h3><figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">spring:</span></span><br><span class="line">  <span class="attr">redis:</span></span><br><span class="line">    <span class="attr">host:</span> <span class="number">127.0</span><span class="number">.0</span><span class="number">.1</span></span><br><span class="line">    <span class="attr">port:</span> <span class="number">6379</span></span><br></pre></td></tr></table></figure>
+
+
+
+
+<h3 id="2-然后我们启动项目-，开始按照之前的请求方式访问-http-localhost-9001-oauth-token-，你会发现-，你的-token-值存储在了-redis-里面-，并且过期时间-也是你设置的-7200-秒-，刷新token-时间为-25600秒-。"><a href="#2-然后我们启动项目-，开始按照之前的请求方式访问-http-localhost-9001-oauth-token-，你会发现-，你的-token-值存储在了-redis-里面-，并且过期时间-也是你设置的-7200-秒-，刷新token-时间为-25600秒-。" class="headerlink" title="2.然后我们启动项目 ，开始按照之前的请求方式访问  http://localhost:9001/oauth/token  ，你会发现 ，你的 token 值存储在了 redis 里面 ，并且过期时间 也是你设置的  7200 秒  ，刷新token 时间为 25600秒 。"></a>2.然后我们启动项目 ，开始按照之前的请求方式访问  <a target="_blank" rel="noopener" href="http://localhost:9001/oauth/token">http://localhost:9001/oauth/token</a>  ，你会发现 ，你的 token 值存储在了 redis 里面 ，并且过期时间 也是你设置的  7200 秒  ，刷新token 时间为 25600秒 。</h3><hr>
+<h2 id="oauth2-相关笔记-：-gitee-地址-：https-gitee-com-guo-shangyu-learning"><a href="#oauth2-相关笔记-：-gitee-地址-：https-gitee-com-guo-shangyu-learning" class="headerlink" title="oauth2 相关笔记  ： gitee 地址 ：https://gitee.com/guo-shangyu/learning"></a>oauth2 相关笔记  ： gitee 地址 ：<strong><a target="_blank" rel="noopener" href="https://gitee.com/guo-shangyu/learning">https://gitee.com/guo-shangyu/learning</a></strong></h2></article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta">Author: </span><span class="post-copyright-info"><a href="mailto:undefined">John Doe</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta">Link: </span><span class="post-copyright-info"><a href="http://example.com/2021/08/25/aouth2-pass-token-redis/">http://example.com/2021/08/25/aouth2-pass-token-redis/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta">Copyright Notice: </span><span class="post-copyright-info">All articles in this blog are licensed under <a target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a> unless stating additionally.</span></div></div><div class="tag_share"><div class="post-meta__tag-list"></div><div class="post_share"><div class="social-share" data-image="/null" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/social-share.js/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/social-share.js/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><div class="next-post pull-full"><a href="/2021/08/15/aouth2-pass-refresh_token/"><img class="next-cover" src="/" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="pagination-info"><div class="label">Next Post</div><div class="next_info">Spring Security 结合 oauth2的基本使用方法（三）</div></div></a></div></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info"><div class="card-info-avatar is-center"><img class="avatar-img" src="/null" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/><div class="author-info__name">John Doe</div><div class="author-info__description"></div></div><div class="card-info-data"><div class="card-info-data-item is-center"><a href="/archives/"><div class="headline">Articles</div><div class="length-num">4</div></a></div></div><a class="button--animated" id="card-info-btn" target="_blank" rel="noopener" href="https://gitee.com/guo-shangyu"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn card-announcement-animation"></i><span>Announcement</span></div><div class="announcement_content">This is my Blog</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>Catalog</span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-%E5%89%8D%E9%9D%A2%E6%88%91%E4%BB%AC%E8%AF%B4%E4%BA%86-%E5%A6%82%E4%BD%95%E5%8E%BB%E5%88%B7%E6%96%B0-token-%E7%9A%84%E5%80%BC%EF%BC%8C%E7%8E%B0%E5%9C%A8%E6%88%91%E4%BB%AC%E8%AE%B2%E4%B8%80%E4%B8%8B-token%E7%9A%84-%E5%AD%98%E5%82%A8%E4%BD%8D%E7%BD%AE%EF%BC%8C%E4%B9%8B%E5%89%8D%E6%88%91%E4%BB%AC%E6%98%AF%E5%90%A7token%E7%9A%84%E5%80%BC%E5%AD%98%E5%82%A8%E5%9C%A8-%E5%86%85%E5%AD%98%E9%87%8C%E9%9D%A2%EF%BC%8C%E7%8E%B0%E5%9C%A8-%E6%88%91%E4%BB%AC%E6%8A%8A-token%E5%AD%98%E5%85%A5-redis-%E9%87%8C%E9%9D%A2%E3%80%82"><span class="toc-number">1.</span> <span class="toc-text">1.前面我们说了 如何去刷新 token 的值，现在我们讲一下 token的 存储位置，之前我们是吧token的值存储在 内存里面，现在 我们把 token存入 redis 里面。</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#1-1-%E9%A6%96%E5%85%88-pom%E6%96%87%E4%BB%B6-%E6%B7%BB%E5%8A%A0-redis-%E4%BE%9D%E8%B5%96"><span class="toc-number">2.</span> <span class="toc-text">1-1 首先 pom文件 添加 redis 依赖</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%88%91%E4%BB%AC%E4%BF%AE%E6%94%B9-AuthorizationServer-%E7%B1%BB"><span class="toc-number">3.</span> <span class="toc-text">我们修改  AuthorizationServer 类</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#yml-%E6%96%87%E4%BB%B6%E4%B8%AD%E9%85%8D%E7%BD%AE-redis-%E8%BF%9E%E6%8E%A5-%E6%96%B9%E5%BC%8F-%EF%BC%8C%E5%89%8D%E6%8F%90%E6%98%AF%E6%9C%AC%E5%9C%B0%E5%90%AF%E5%8A%A8%E4%BA%86-redis"><span class="toc-number">4.</span> <span class="toc-text">yml 文件中配置   redis 连接 方式 ，前提是本地启动了 redis</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-%E7%84%B6%E5%90%8E%E6%88%91%E4%BB%AC%E5%90%AF%E5%8A%A8%E9%A1%B9%E7%9B%AE-%EF%BC%8C%E5%BC%80%E5%A7%8B%E6%8C%89%E7%85%A7%E4%B9%8B%E5%89%8D%E7%9A%84%E8%AF%B7%E6%B1%82%E6%96%B9%E5%BC%8F%E8%AE%BF%E9%97%AE-http-localhost-9001-oauth-token-%EF%BC%8C%E4%BD%A0%E4%BC%9A%E5%8F%91%E7%8E%B0-%EF%BC%8C%E4%BD%A0%E7%9A%84-token-%E5%80%BC%E5%AD%98%E5%82%A8%E5%9C%A8%E4%BA%86-redis-%E9%87%8C%E9%9D%A2-%EF%BC%8C%E5%B9%B6%E4%B8%94%E8%BF%87%E6%9C%9F%E6%97%B6%E9%97%B4-%E4%B9%9F%E6%98%AF%E4%BD%A0%E8%AE%BE%E7%BD%AE%E7%9A%84-7200-%E7%A7%92-%EF%BC%8C%E5%88%B7%E6%96%B0token-%E6%97%B6%E9%97%B4%E4%B8%BA-25600%E7%A7%92-%E3%80%82"><span class="toc-number">5.</span> <span class="toc-text">2.然后我们启动项目 ，开始按照之前的请求方式访问  http:&#x2F;&#x2F;localhost:9001&#x2F;oauth&#x2F;token  ，你会发现 ，你的 token 值存储在了 redis 里面 ，并且过期时间 也是你设置的  7200 秒  ，刷新token 时间为 25600秒 。</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#oauth2-%E7%9B%B8%E5%85%B3%E7%AC%94%E8%AE%B0-%EF%BC%9A-gitee-%E5%9C%B0%E5%9D%80-%EF%BC%9Ahttps-gitee-com-guo-shangyu-learning"><span class="toc-number"></span> <span class="toc-text">oauth2 相关笔记  ： gitee 地址 ：https:&#x2F;&#x2F;gitee.com&#x2F;guo-shangyu&#x2F;learning</span></a></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>Recent Post</span></div><div class="aside-list"><div class="aside-list-item"><div class="content"><a class="title" href="/2021/08/25/aouth2-pass-token-redis/" title="Spring Security 结合 oauth2的基本使用方法（四）">Spring Security 结合 oauth2的基本使用方法（四）</a><time datetime="2021-08-25T13:56:43.346Z" title="Created 2021-08-25 21:56:43">2021-08-25</time></div></div><div class="aside-list-item"><div class="content"><a class="title" href="/2021/08/15/aouth2-pass-refresh_token/" title="Spring Security 结合 oauth2的基本使用方法（三）">Spring Security 结合 oauth2的基本使用方法（三）</a><time datetime="2021-08-15T05:29:03.721Z" title="Created 2021-08-15 13:29:03">2021-08-15</time></div></div><div class="aside-list-item"><div class="content"><a class="title" href="/2021/06/01/aouth2-pass/" title="Spring Security 结合 oauth2的基本使用方法（二）">Spring Security 结合 oauth2的基本使用方法（二）</a><time datetime="2021-06-01T13:44:33.396Z" title="Created 2021-06-01 21:44:33">2021-06-01</time></div></div><div class="aside-list-item"><div class="content"><a class="title" href="/2021/05/31/oauth2/" title="Spring Cloud Security 结合 oauth2的基本使用方法">Spring Cloud Security 结合 oauth2的基本使用方法</a><time datetime="2021-05-31T15:09:16.902Z" title="Created 2021-05-31 23:09:16">2021-05-31</time></div></div></div></div></div></div></main><footer id="footer"><div id="footer-wrap"><div class="copyright">&copy;2020 - 2021 By John Doe</div><div class="framework-info"><span>Framework </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>Theme </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="Read Mode"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="Switch Between Light And Dark Mode"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="Toggle between single-column and double-column"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside_config" type="button" title="Setting"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="Table Of Contents"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="Back To Top"><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js"></script><script src="/js/main.js"></script><div class="js-pjax"></div><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
