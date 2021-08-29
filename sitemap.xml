@@ -2,6 +2,13 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   
   <url>
+    <loc>http://example.com/2021/08/29/oauth2-jwt/</loc>
+    
+    <lastmod>2021-08-29</lastmod>
+    
+  </url>
+  
+  <url>
     <loc>http://example.com/2021/08/26/aouth2-datasouce/</loc>
     
     <lastmod>2021-08-26</lastmod>
@@ -39,7 +46,7 @@
 
   <url>
     <loc>http://example.com/</loc>
-    <lastmod>2021-08-26</lastmod>
+    <lastmod>2021-08-29</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
